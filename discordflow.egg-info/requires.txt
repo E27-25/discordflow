@@ -1,0 +1,7 @@
+requests>=2.25.0
+
+[dev]
+build
+twine
+pytest
+pytest-mock

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discordflow"
+version = "0.2.0"
+authors = [
+  { name="DiscordFlow Contributors", email="your.email@example.com" },
+]
+description = "A lightweight MLflow clone that logs ML training metrics, parameters, and artifacts directly to Discord webhooks."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.25.0",
+]
+keywords = ["mlflow", "discord", "machine-learning", "experiment-tracking", "webhooks", "deep-learning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Logging",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+]
+
+[project.optional-dependencies]
+dev = ["build", "twine", "pytest", "pytest-mock"]
+
+[project.urls]
+"Homepage" = "https://github.com/yourusername/discordflow"
+"Bug Tracker" = "https://github.com/yourusername/discordflow/issues"
+"Documentation" = "https://github.com/yourusername/discordflow#readme"
+"Changelog" = "https://github.com/yourusername/discordflow/releases"
