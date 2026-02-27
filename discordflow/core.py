@@ -578,7 +578,6 @@ class DiscordFlow:
                 try:
                     resp = requests.post(url, json=payload, timeout=10)
                     if resp.status_code == 429:
-                        # Respect Discord's Retry-After (seconds, possibly float)
                         retry_after = float(resp.headers.get("Retry-After", 2.0))
                         print(
                             f"[DiscordFlow] ⏳  Rate-limited — waiting {retry_after:.1f}s "
@@ -586,9 +585,21 @@ class DiscordFlow:
                             file=sys.stderr,
                         )
                         time.sleep(retry_after + 0.1)
-                        continue   # retry
+                        continue
+                    if resp.status_code == 400 and thread_id is None:
+                        # Most common cause: webhook belongs to a Forum channel.
+                        # Forum webhooks always 400 unless a thread_id is supplied.
+                        print(
+                            "[DiscordFlow] ❌  400 Bad Request — your webhook URL likely "
+                            "belongs to a Forum channel.\n"
+                            "           → Use  dflow.start_forum_run()  instead of  "
+                            "dflow.start_run()\n"
+                            f"           → Response: {resp.text[:200]}",
+                            file=sys.stderr,
+                        )
+                        return  # no point retrying a config error
                     resp.raise_for_status()
-                    return  # success
+                    return
                 except requests.exceptions.RequestException as exc:
                     if attempt == 3:
                         print(f"[DiscordFlow] ⚠  Failed to send embed: {exc}", file=sys.stderr)
