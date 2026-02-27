@@ -142,7 +142,7 @@ dflow = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_WineClassifier",
     username        = "TrainBot | Watin Promfiy",
-    state_file      = "/tmp/discordflow_demo_state.json",
+    state_file      = "discordflow_state.json",   # saved in current dir (visible in Colab)
     async_logging   = False,
     dry_run         = DRY_RUN,
 )
@@ -250,6 +250,7 @@ if CHANNEL_MODE == "forum":
         description="MLP on Wine — Watin Promfiy"
     ) as run:
         train_wine(run)
+    dflow.save()   # ← saves thread ID so run can be resumed after Colab restart
 else:
     with dflow.start_run("wine-mlp-v1") as run:
         train_wine(run)
@@ -277,7 +278,7 @@ dflow2 = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_IrisLDA",
     username        = "TrainBot | Watin Promfiy",
-    state_file      = "/tmp/discordflow_demo_state.json",
+    state_file      = "discordflow_state.json",   # same state file — merges thread IDs
     async_logging   = False,
     dry_run         = DRY_RUN,
 )
@@ -334,6 +335,7 @@ if CHANNEL_MODE == "forum":
         description="LDA on Iris — Watin Promfiy"
     ) as run:
         train_lda(run)
+    dflow2.save()   # ← merges iris thread ID into same state file
 else:
     with dflow2.start_run("iris-lda-v1") as run:
         train_lda(run)
@@ -349,25 +351,25 @@ print("  [5/8] State persistence & resume_run()")
 print("─" * 60)
 
 fresh = DiscordFlow(
-    webhook_url = WEBHOOK_URL,
+    webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_StateTest",
-    state_file  = "/tmp/discordflow_demo_state.json",
-    dry_run     = DRY_RUN,
-    async_logging = False,
+    state_file      = "discordflow_state.json",
+    dry_run         = DRY_RUN,
+    async_logging   = False,
 )
-dflow.save("/tmp/discordflow_demo_state.json")
+dflow.save("discordflow_state.json")
 fresh2 = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_StateTest",
-    state_file      = "/tmp/discordflow_demo_state.json",
+    state_file      = "discordflow_state.json",
     dry_run         = DRY_RUN,
     async_logging   = False,
 )
 print("  Auto-loaded state:", fresh2._run_state)
 
 fresh2.resume_run("manual_run", "1234567890000001")
-fresh2.save("/tmp/discordflow_demo_state_v2.json")
-print("  After resume_run:", json.load(open("/tmp/discordflow_demo_state_v2.json")))
+fresh2.save()   # saves to discordflow_state.json in current dir
+print("  After resume_run:", json.load(open("discordflow_state.json")))
 fresh2.finish()
 print()
 
