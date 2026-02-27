@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║      DiscordFlow v0.3.4 — Complete Feature Demo                 ║
+║      DiscordFlow v0.3.5 — Complete Feature Demo                 ║
 ║      Real Training: MLPClassifier on Wine + LDA on Iris         ║
 ║      Author : Watin Promfiy                                     ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 Install
 -------
-!pip install "discordflow[system]==0.3.4" scikit-learn matplotlib -q
+!pip install "discordflow[system]==0.3.5" scikit-learn matplotlib -q
 
 Config
 ------
@@ -67,7 +67,7 @@ from discordflow.utils import (
 )
 
 print("=" * 65)
-print("  DiscordFlow v0.3.4 — Complete Feature Demo")
+print("  DiscordFlow v0.3.5 — Complete Feature Demo")
 print(f"  Author  : Watin Promfiy")
 print(f"  Mode    : {'DRY RUN' if DRY_RUN else '🔴 LIVE → Discord'}")
 print(f"  Channel : {CHANNEL_MODE.upper()}")
@@ -477,5 +477,5 @@ print("   [x] ArtifactTooLargeError / RunNotActiveError / WebhookError")
 print("   [x] async_logging=False / dry_run / finish()")
 print("   [x] Utils: human_size, human_duration, ascii_progress, truncate")
 print()
-print(f"  Author: Watin Promfiy  |  DiscordFlow v0.3.4")
+print(f"  Author: Watin Promfiy  |  DiscordFlow v0.3.5")
 print("=" * 65)

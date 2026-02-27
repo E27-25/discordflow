@@ -28,7 +28,7 @@ from .exceptions import (
     RunNotActiveError,
 )
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 __author__  = "Watin Promfiy"
 __license__ = "MIT"
 

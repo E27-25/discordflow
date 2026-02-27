@@ -25,6 +25,7 @@ from .run import ActiveRun, ForumActiveRun
 # Discord limits
 _MAX_ARTIFACT_BYTES = 25 * 1024 * 1024  # 25 MB
 _EMBED_FIELD_LIMIT  = 25
+_MAX_RETRY_WAIT     = 30.0               # never block longer than 30s for rate limits
 
 
 class DiscordFlow:
@@ -579,6 +580,13 @@ class DiscordFlow:
                     resp = requests.post(url, json=payload, timeout=10)
                     if resp.status_code == 429:
                         retry_after = float(resp.headers.get("Retry-After", 2.0))
+                        if retry_after > _MAX_RETRY_WAIT:
+                            print(
+                                f"[DiscordFlow] ⏭️  Rate-limit too long ({retry_after:.0f}s) — "
+                                "skipping message to avoid blocking.",
+                                file=sys.stderr,
+                            )
+                            return  # give up on this message rather than block forever
                         print(
                             f"[DiscordFlow] ⏳  Rate-limited — waiting {retry_after:.1f}s "
                             f"(attempt {attempt + 1}/3)",
@@ -628,6 +636,13 @@ class DiscordFlow:
                 )
                 if resp.status_code == 429:
                     retry_after = float(resp.headers.get("Retry-After", 2.0))
+                    if retry_after > _MAX_RETRY_WAIT:
+                        print(
+                            f"[DiscordFlow] ⏭️  Rate-limit too long ({retry_after:.0f}s) — "
+                            "skipping file upload to avoid blocking.",
+                            file=sys.stderr,
+                        )
+                        return
                     print(
                         f"[DiscordFlow] ⏳  Rate-limited on file upload — waiting {retry_after:.1f}s",
                         file=sys.stderr,
