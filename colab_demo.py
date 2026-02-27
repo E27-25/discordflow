@@ -141,7 +141,8 @@ history_wine = {"epoch": [], "train_loss": [], "val_loss": [], "val_acc": []}
 dflow = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_WineClassifier",
-    username        = "TrainBot | Watin Promfiy",
+    username        = "Weiiiii",
+    avatar_url      = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTK6QQJAuPbD3LrsMlrnbhoavZ9GJPkMkQhEg&s",
     state_file      = "discordflow_state.json",   # saved in current dir (visible in Colab)
     async_logging   = False,
     dry_run         = DRY_RUN,
@@ -277,7 +278,8 @@ lda_loss = round(log_loss(y_te2, lda_prob), 5)
 dflow2 = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_IrisLDA",
-    username        = "TrainBot | Watin Promfiy",
+    username        = "Weiiiii",
+    avatar_url      = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTK6QQJAuPbD3LrsMlrnbhoavZ9GJPkMkQhEg&s",
     state_file      = "discordflow_state.json",   # same state file — merges thread IDs
     async_logging   = False,
     dry_run         = DRY_RUN,
@@ -383,7 +385,8 @@ print("─" * 60)
 err_logger = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_ErrorTest",
-    username        = "TrainBot | Watin Promfiy",
+    username        = "Weiiiii",
+    avatar_url      = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTK6QQJAuPbD3LrsMlrnbhoavZ9GJPkMkQhEg&s",
     async_logging   = False,
     dry_run         = DRY_RUN,
 )
