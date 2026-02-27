@@ -34,6 +34,8 @@ import time
 import json
 import tempfile
 import os
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)   # suppress sklearn ConvergenceWarning
 
 # ── ML ────────────────────────────────────────────────────────────────────────
 import numpy as np

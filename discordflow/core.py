@@ -615,7 +615,8 @@ class DiscordFlow:
         """Send an embed into a specific forum thread."""
         self._send_embed(embed, thread_id=thread_id)
 
-    def _post_with_file(self, url: str, caption: str, filename: str, file_obj) -> None:
+    def _post_with_file(self, url: str, caption: str, filename: str, file_obj,
+                        thread_id: Optional[str] = None) -> None:
         """Upload a file to Discord, retrying on 429."""
         payload = {"content": caption, "username": self._username}
         if self._avatar_url:
@@ -634,6 +635,14 @@ class DiscordFlow:
                     time.sleep(retry_after + 0.1)
                     file_obj.seek(0)   # rewind before retry
                     continue
+                if resp.status_code == 400 and thread_id is None:
+                    print(
+                        f"[DiscordFlow] ❌  400 on file upload — webhook is likely a Forum channel.\n"
+                        "           → Use  dflow.start_forum_run()  instead of  dflow.start_run()\n"
+                        f"           → Set  CHANNEL_MODE = 'forum'  in the demo config",
+                        file=sys.stderr,
+                    )
+                    return  # no point retrying a config error
                 resp.raise_for_status()
                 return  # success
             except requests.exceptions.RequestException as exc:
