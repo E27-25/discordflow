@@ -556,7 +556,11 @@ class DiscordFlow:
         ]
 
     def _send_embed(self, embed: dict, thread_id: Optional[str] = None) -> None:
-        """Send an embed to the channel (or a specific thread)."""
+        """Send an embed to the channel (or a specific thread).
+
+        Automatically retries on 429 Too Many Requests, respecting the
+        ``Retry-After`` header from Discord (up to 3 retries).
+        """
         if "footer" not in embed:
             embed["footer"] = {"text": f"DiscordFlow • {self.experiment_name}"}
 
@@ -570,11 +574,26 @@ class DiscordFlow:
             payload["avatar_url"] = self._avatar_url
 
         def _post():
-            try:
-                resp = requests.post(url, json=payload, timeout=10)
-                resp.raise_for_status()
-            except requests.exceptions.RequestException as exc:
-                print(f"[DiscordFlow] ⚠  Failed to send embed: {exc}", file=sys.stderr)
+            for attempt in range(4):   # up to 3 retries
+                try:
+                    resp = requests.post(url, json=payload, timeout=10)
+                    if resp.status_code == 429:
+                        # Respect Discord's Retry-After (seconds, possibly float)
+                        retry_after = float(resp.headers.get("Retry-After", 2.0))
+                        print(
+                            f"[DiscordFlow] ⏳  Rate-limited — waiting {retry_after:.1f}s "
+                            f"(attempt {attempt + 1}/3)",
+                            file=sys.stderr,
+                        )
+                        time.sleep(retry_after + 0.1)
+                        continue   # retry
+                    resp.raise_for_status()
+                    return  # success
+                except requests.exceptions.RequestException as exc:
+                    if attempt == 3:
+                        print(f"[DiscordFlow] ⚠  Failed to send embed: {exc}", file=sys.stderr)
+                    else:
+                        time.sleep(0.5 * (attempt + 1))
 
         if self._async_logging and self._executor:
             self._executor.submit(_post)
@@ -586,16 +605,30 @@ class DiscordFlow:
         self._send_embed(embed, thread_id=thread_id)
 
     def _post_with_file(self, url: str, caption: str, filename: str, file_obj) -> None:
+        """Upload a file to Discord, retrying on 429."""
         payload = {"content": caption, "username": self._username}
         if self._avatar_url:
             payload["avatar_url"] = self._avatar_url
-        try:
-            resp = requests.post(
-                url, files={"file": (filename, file_obj)}, data=payload, timeout=30
-            )
-            resp.raise_for_status()
-        except requests.exceptions.RequestException as exc:
-            raise WebhookError(f"Failed to upload file: {exc}") from exc
+        for attempt in range(4):
+            try:
+                resp = requests.post(
+                    url, files={"file": (filename, file_obj)}, data=payload, timeout=30
+                )
+                if resp.status_code == 429:
+                    retry_after = float(resp.headers.get("Retry-After", 2.0))
+                    print(
+                        f"[DiscordFlow] ⏳  Rate-limited on file upload — waiting {retry_after:.1f}s",
+                        file=sys.stderr,
+                    )
+                    time.sleep(retry_after + 0.1)
+                    file_obj.seek(0)   # rewind before retry
+                    continue
+                resp.raise_for_status()
+                return  # success
+            except requests.exceptions.RequestException as exc:
+                if attempt == 3:
+                    raise WebhookError(f"Failed to upload file: {exc}") from exc
+                time.sleep(0.5 * (attempt + 1))
 
     def _post_run_summary(
         self, run: "ActiveRun", error_text: Optional[str] = None, thread_id: Optional[str] = None
