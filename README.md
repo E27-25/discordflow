@@ -263,6 +263,14 @@ pip install -e ".[dev]"
 
 ---
 
+## 👤 Author
+
+**Watin Promfiy**
+- GitHub: [@E27-25](https://github.com/E27-25)
+- Project: [github.com/E27-25/discordflow](https://github.com/E27-25/discordflow)
+
+---
+
 ## 📄 License
 
-MIT © DiscordFlow Contributors
+MIT © Watin Promfiy
