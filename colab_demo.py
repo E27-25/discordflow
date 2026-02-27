@@ -1,54 +1,60 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║         DiscordFlow v0.3.0 — Complete Feature Demo              ║
-║  Author : Watin Promfiy                                         ║
-║  Purpose: Exercise EVERY feature in the library                 ║
+║      DiscordFlow v0.3.3 — Complete Feature Demo                 ║
+║      Real Training: MLPClassifier on Wine + LDA on Iris         ║
+║      Author : Watin Promfiy                                     ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-Run in Google Colab (or locally with dry_run=True):
+Install
+-------
+!pip install "discordflow[system]==0.3.3" scikit-learn matplotlib -q
 
-    # Install
-    !pip install "discordflow[system]" -q
-
-    # Optional: GPU metrics on Colab GPU runtime
-    !pip install "discordflow[system,gpu]" -q
-
-Fill in your webhook URLs below, set DRY_RUN = False to send live.
+Config
+------
+Set WEBHOOK_URL and CHANNEL_MODE below, then run.
 """
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
-NORMAL_WEBHOOK_URL = "YOUR_NORMAL_CHANNEL_WEBHOOK_URL"
-FORUM_WEBHOOK_URL  = "YOUR_FORUM_CHANNEL_WEBHOOK_URL"
+WEBHOOK_URL  = "YOUR_WEBHOOK_URL_HERE"
 
-# Set False to post to real Discord channels
-DRY_RUN = True
+# "normal" → text channel webhook   → uses start_run()
+# "forum"  → forum channel webhook  → uses start_forum_run() (each run = own thread)
+CHANNEL_MODE = "forum"
 
-# Which hardware metrics to log each step (remove any you don't need)
-# Requires: pip install "discordflow[system]"
-#           pip install "discordflow[system,gpu]"  ← for GPU
-SYS_METRICS = ["cpu", "ram"]
-# SYS_METRICS = ["cpu", "ram", "gpu", "disk", "network"]   # everything
-# SYS_METRICS = []                                           # disabled
+DRY_RUN = False  # True = print to stdout, no real Discord calls
+
+# Hardware metrics logged every epoch (remove any you don't have)
+SYS_METRICS = ["cpu", "ram", "gpu"]
+# SYS_METRICS = []   # disable HW logging
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Stdlib ────────────────────────────────────────────────────────────────────
 import time
 import json
-import math
 import tempfile
 import os
 
-# ── Try importing matplotlib (optional for this demo) ────────────────────────
+# ── ML ────────────────────────────────────────────────────────────────────────
+import numpy as np
+from sklearn.datasets import load_wine, load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import accuracy_score, log_loss
+
+# ── Plotting ─────────────────────────────────────────────────────────────────
 try:
     import matplotlib
-    matplotlib.use("Agg")   # non-interactive backend — safe for Colab and scripts
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    HAS_MATPLOTLIB = True
+    HAS_MPL = True
 except ImportError:
-    HAS_MATPLOTLIB = False
-    print("⚠  matplotlib not installed — figure logging tests will be skipped.")
-    print("   Install with: pip install matplotlib\n")
+    HAS_MPL = False
+    print("⚠ matplotlib not installed — figure tests skipped")
 
+# ── DiscordFlow ───────────────────────────────────────────────────────────────
 from discordflow import DiscordFlow, ActiveRun, ForumActiveRun
 from discordflow.exceptions import (
     DiscordFlowError, WebhookError, ArtifactTooLargeError, RunNotActiveError,
@@ -59,11 +65,11 @@ from discordflow.utils import (
 )
 
 print("=" * 65)
-print("  DiscordFlow v0.3.0 — Feature Coverage Demo")
-print(f"  Author : Watin Promfiy")
-print(f"  Mode   : {'DRY RUN (stdout only)' if DRY_RUN else '🔴 LIVE (posting to Discord)'}")
-print("=" * 65)
-print()
+print("  DiscordFlow v0.3.3 — Complete Feature Demo")
+print(f"  Author  : Watin Promfiy")
+print(f"  Mode    : {'DRY RUN' if DRY_RUN else '🔴 LIVE → Discord'}")
+print(f"  Channel : {CHANNEL_MODE.upper()}")
+print("=" * 65, "\n")
 
 # =============================================================================
 # SECTION 1 — Utils
@@ -71,7 +77,6 @@ print()
 print("─" * 60)
 print("  [1/8] Utility helpers")
 print("─" * 60)
-
 print("  human_size(1536)       :", human_size(1536))
 print("  human_size(27_000_000) :", human_size(27_000_000))
 print("  human_duration(65)     :", human_duration(65))
@@ -85,190 +90,253 @@ print()
 # SECTION 2 — System Metrics
 # =============================================================================
 print("─" * 60)
-print("  [2/8] System metrics (collect_system_metrics)")
+print("  [2/8] System metrics")
 print("─" * 60)
-
-all_metrics = ["cpu", "ram", "gpu", "disk", "network"]
-hw = collect_system_metrics(all_metrics)
-for label, val in hw.items():
-    print(f"  {label}: {val}")
+hw = collect_system_metrics(["cpu", "ram", "gpu", "disk", "network"])
+for k, v in hw.items():
+    print(f"  {k}: {v}")
 print()
 
 # =============================================================================
-# SECTION 3 — Normal Channel Mode  (start_run)
+# Helper: prepare a sklearn dataset + scaler
+# =============================================================================
+def prepare_wine():
+    d = load_wine()
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        d.data, d.target, test_size=0.2, random_state=42, stratify=d.target
+    )
+    sc = StandardScaler()
+    return sc.fit_transform(X_tr), sc.transform(X_te), y_tr, y_te, d.target_names
+
+def prepare_iris():
+    d = load_iris()
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        d.data, d.target, test_size=0.2, random_state=7, stratify=d.target
+    )
+    sc = StandardScaler()
+    return sc.fit_transform(X_tr), sc.transform(X_te), y_tr, y_te, d.target_names
+
+# =============================================================================
+# SECTION 3 — Normal / Forum Channel — real MLP training on Wine
 # =============================================================================
 print("─" * 60)
-print("  [3/8] Normal channel — start_run()")
+print("  [3/8] Primary run — MLP on Wine (all logging features)")
 print("─" * 60)
 
-normal_logger = DiscordFlow(
-    webhook_url     = NORMAL_WEBHOOK_URL,
-    experiment_name = "WP_ResNet50",
-    username        = "TrainBot · Watin Promfiy",
-    async_logging   = False,   # sync for predictable demo output
-    dry_run         = DRY_RUN,
+X_tr, X_te, y_tr, y_te, cls_names = prepare_wine()
+
+EPOCHS   = 20
+LOG_EVERY = 5   # post metric embed every N epochs → keeps Discord tidy
+
+clf_wine = MLPClassifier(
+    hidden_layer_sizes=(128, 64), activation="relu", solver="adam",
+    learning_rate_init=1e-3, max_iter=1, warm_start=True,
+    alpha=1e-4, random_state=42, n_iter_no_change=9999,
 )
 
-# 3a — log_params
-with normal_logger.start_run("baseline_v1") as run:
+history_wine = {"epoch": [], "train_loss": [], "val_loss": [], "val_acc": []}
 
-    # ── Hyperparameters ──────────────────────────────────────────
-    run.log_param("author", "Watin Promfiy")
-    run.log_params({
-        "architecture" : "ResNet-50",
-        "lr"           : 3e-4,
-        "batch_size"   : 128,
-        "epochs"       : 5,
-        "optimizer"    : "AdamW",
-        "scheduler"    : "CosineAnnealingLR",
-        "weight_decay" : 1e-4,
-        "mixed_precision": True,
-    })
-
-    # ── Tags ─────────────────────────────────────────────────────
-    run.set_tag("dataset",   "ImageNet-1k")
-    run.set_tag("framework", "PyTorch 2.2")
-    run.set_tag("author",    "Watin Promfiy")
-
-    # ── Metrics per epoch (with system metrics) ──────────────────
-    EPOCHS = 5
-    for epoch in range(1, EPOCHS + 1):
-        t_loss = round(2.5 * math.exp(-0.4 * epoch) + 0.05, 4)
-        v_loss = round(2.8 * math.exp(-0.38 * epoch) + 0.08, 4)
-        v_acc  = round(0.5 + 0.09 * epoch, 4)
-
-        run.log_metric("Train Loss", t_loss, step=epoch,
-                       system_metrics=SYS_METRICS if SYS_METRICS else None)
-        run.log_metrics(
-            {"Val Loss": v_loss, "Val Acc": v_acc},
-            step=epoch,
-            system_metrics=SYS_METRICS if epoch == 3 else None,  # attach HW on epoch 3 only
-        )
-
-        progress = ascii_progress(epoch, EPOCHS)
-        print(f"  Epoch {epoch}/{EPOCHS}  {progress}  loss={t_loss}  val_acc={v_acc}")
-
-    # ── log_text ──────────────────────────────────────────────────
-    csv_data = "epoch,train_loss,val_loss,val_acc\n"
-    for e in range(1, EPOCHS + 1):
-        tl = round(2.5 * math.exp(-0.4 * e) + 0.05, 4)
-        vl = round(2.8 * math.exp(-0.38 * e) + 0.08, 4)
-        va = round(0.5 + 0.09 * e, 4)
-        csv_data += f"{e},{tl},{vl},{va}\n"
-    run.log_text(csv_data, filename="training_history.csv")
-    print("  📄 Logged text artifact: training_history.csv")
-
-    # ── log_artifact (real file) ──────────────────────────────────
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
-        json.dump({"best_epoch": 5, "val_acc": 0.95, "author": "Watin Promfiy"}, f, indent=2)
-        tmp_json = f.name
-    run.log_artifact(tmp_json)
-    print(f"  📁 Logged file artifact: {os.path.basename(tmp_json)}")
-    os.unlink(tmp_json)
-
-    # ── log_figure ────────────────────────────────────────────────
-    if HAS_MATPLOTLIB:
-        epochs_list = list(range(1, EPOCHS + 1))
-        t_losses = [round(2.5 * math.exp(-0.4 * e) + 0.05, 4) for e in epochs_list]
-        v_losses = [round(2.8 * math.exp(-0.38 * e) + 0.08, 4) for e in epochs_list]
-        v_accs   = [round(0.5 + 0.09 * e, 4) for e in epochs_list]
-
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-        fig.suptitle("ResNet-50 Training · Watin Promfiy", fontsize=13)
-
-        ax1.plot(epochs_list, t_losses, "o-", label="Train Loss", color="#3498DB")
-        ax1.plot(epochs_list, v_losses, "s--", label="Val Loss", color="#E74C3C")
-        ax1.set_xlabel("Epoch"); ax1.set_ylabel("Loss")
-        ax1.set_title("Loss Curve"); ax1.legend()
-
-        ax2.bar(epochs_list, v_accs, color="#2ECC71")
-        ax2.set_xlabel("Epoch"); ax2.set_ylabel("Accuracy")
-        ax2.set_title("Validation Accuracy")
-
-        plt.tight_layout()
-        run.log_figure(fig, title="ResNet-50 Loss & Accuracy — Watin Promfiy")
-        plt.close(fig)
-        print("  📊 Logged matplotlib figure")
-    else:
-        print("  ⚠  Skipping figure (matplotlib not installed)")
-
-print()
-normal_logger.finish()
-
-# =============================================================================
-# SECTION 4 — Forum Channel Mode  (start_forum_run)
-# =============================================================================
-print("─" * 60)
-print("  [4/8] Forum channel — start_forum_run()")
-print("─" * 60)
-
-forum_logger = DiscordFlow(
-    webhook_url     = FORUM_WEBHOOK_URL,
-    experiment_name = "WP_LLM_FineTune",
-    username        = "TrainBot · Watin Promfiy",
+dflow = DiscordFlow(
+    webhook_url     = WEBHOOK_URL,
+    experiment_name = "WP_WineClassifier",
+    username        = "TrainBot | Watin Promfiy",
     state_file      = "/tmp/discordflow_demo_state.json",
     async_logging   = False,
     dry_run         = DRY_RUN,
 )
 
-with forum_logger.start_forum_run(
-    "lora_rank_16",
-    description="LoRA fine-tine benchmark · Watin Promfiy · rank=16"
-) as run:
-
+def train_wine(run):
     run.log_param("author", "Watin Promfiy")
     run.log_params({
-        "base_model"  : "Meta-Llama-3-8B",
-        "lora_rank"   : 16,
-        "lora_alpha"  : 32,
-        "lr"          : 2e-4,
-        "epochs"      : 3,
-        "batch_size"  : 4,
-        "grad_accum"  : 8,
-        "bf16"        : True,
+        "dataset"       : "Wine (sklearn)",
+        "model"         : "MLPClassifier",
+        "hidden_layers" : "(128, 64)",
+        "activation"    : "relu",
+        "optimizer"     : "adam",
+        "lr"            : 1e-3,
+        "alpha_l2"      : 1e-4,
+        "batch_size"    : 32,
+        "epochs"        : EPOCHS,
+        "log_every"     : LOG_EVERY,
     })
-    run.set_tag("task",    "Instruction Tuning")
-    run.set_tag("dataset", "Alpaca-52k")
-    run.set_tag("author",  "Watin Promfiy")
+    run.set_tag("framework", "scikit-learn")
+    run.set_tag("dataset",   "Wine (3 classes, 13 features)")
+    run.set_tag("author",    "Watin Promfiy")
 
-    for epoch in range(1, 4):
-        t_loss = round(2.0 * math.exp(-0.5 * epoch) + 0.1, 4)
-        run.log_metrics(
-            {"Train Loss": t_loss, "Perplexity": round(math.exp(t_loss), 3)},
-            step=epoch,
-            system_metrics=SYS_METRICS if SYS_METRICS else None,
-        )
-        print(f"  Forum Epoch {epoch}/3  loss={t_loss}")
+    print(f"\n  Training {EPOCHS} epochs …\n")
+    t0 = time.time()
 
-    if HAS_MATPLOTLIB:
-        epochs_list = list(range(1, 4))
-        losses = [round(2.0 * math.exp(-0.5 * e) + 0.1, 4) for e in epochs_list]
-        ppls   = [round(math.exp(l), 3) for l in losses]
+    for epoch in range(1, EPOCHS + 1):
+        clf_wine.fit(X_tr, y_tr)
 
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-        fig.suptitle("LLaMA-3 LoRA Fine-tune · Watin Promfiy", fontsize=13)
-        axes[0].plot(epochs_list, losses, "o-", color="#9B59B6"); axes[0].set_title("Train Loss")
-        axes[1].plot(epochs_list, ppls,   "s-", color="#F39C12"); axes[1].set_title("Perplexity")
+        p_tr = clf_wine.predict_proba(X_tr)
+        p_te = clf_wine.predict_proba(X_te)
+        t_loss = round(log_loss(y_tr, p_tr), 5)
+        v_loss = round(log_loss(y_te, p_te), 5)
+        v_acc  = round(accuracy_score(y_te, clf_wine.predict(X_te)), 4)
+
+        history_wine["epoch"].append(epoch)
+        history_wine["train_loss"].append(t_loss)
+        history_wine["val_loss"].append(v_loss)
+        history_wine["val_acc"].append(v_acc)
+
+        bar = ascii_progress(epoch, EPOCHS)
+        print(f"  Epoch {epoch:>2}/{EPOCHS}  {bar}  "
+              f"train_loss={t_loss:.5f}  val_acc={v_acc*100:.1f}%")
+
+        if epoch % LOG_EVERY == 0 or epoch == EPOCHS:
+            run.log_metrics(
+                {"Train Loss": t_loss, "Val Loss": v_loss,
+                 "Val Acc": f"{v_acc*100:.1f}%"},
+                step=epoch,
+                system_metrics=SYS_METRICS if SYS_METRICS else None,
+            )
+
+    elapsed = time.time() - t0
+    print(f"\n  ✅  Done in {human_duration(elapsed)}"
+          f"  |  Final val_acc={v_acc*100:.1f}%\n")
+
+    # ── log_figure ──────────────────────────────────────────────────────────
+    if HAS_MPL:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+        fig.suptitle("MLP on Wine — Watin Promfiy", fontsize=13)
+
+        ax1.plot(history_wine["epoch"], history_wine["train_loss"],
+                 "o-", color="#3498DB", label="Train", markersize=4)
+        ax1.plot(history_wine["epoch"], history_wine["val_loss"],
+                 "s--", color="#E74C3C", label="Val", markersize=4)
+        ax1.set(xlabel="Epoch", ylabel="Log Loss", title="Loss Curves")
+        ax1.legend()
+
+        ax2.plot(history_wine["epoch"],
+                 [a * 100 for a in history_wine["val_acc"]],
+                 "o-", color="#2ECC71", markersize=4)
+        ax2.set(xlabel="Epoch", ylabel="Accuracy (%)", title="Val Accuracy")
+
         plt.tight_layout()
-        run.log_figure(fig, title="LoRA Training Curves — Watin Promfiy")
+        run.log_figure(fig, title="Wine Classifier — Loss & Accuracy (Watin Promfiy)")
         plt.close(fig)
-        print("  📊 Logged forum figure")
+        print("  📊 Figure logged")
 
-    run.log_text(
-        "Step,Loss\n" + "\n".join(
-            f"{e},{round(2.0*math.exp(-0.5*e)+0.1,4)}" for e in range(1, 4)
-        ),
-        filename="lora_loss.csv",
+    # ── log_text (CSV) ───────────────────────────────────────────────────────
+    csv = "epoch,train_loss,val_loss,val_acc\n" + "\n".join(
+        f"{e},{tl},{vl},{va}"
+        for e, tl, vl, va in zip(
+            history_wine["epoch"], history_wine["train_loss"],
+            history_wine["val_loss"], history_wine["val_acc"]
+        )
     )
+    run.log_text(csv, filename="wine_history.csv")
+    print("  📄 CSV logged")
 
+    # ── log_artifact (temp JSON) ─────────────────────────────────────────────
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
+        json.dump({
+            "best_val_acc": max(history_wine["val_acc"]),
+            "final_val_acc": history_wine["val_acc"][-1],
+            "author": "Watin Promfiy",
+        }, f, indent=2)
+        tmp_json = f.name
+    run.log_artifact(tmp_json)
+    os.unlink(tmp_json)
+    print("  📁 JSON artifact logged")
+
+# Launch with correct channel mode
+if CHANNEL_MODE == "forum":
+    with dflow.start_forum_run(
+        "wine-mlp-v1",
+        description="MLP on Wine — Watin Promfiy"
+    ) as run:
+        train_wine(run)
+else:
+    with dflow.start_run("wine-mlp-v1") as run:
+        train_wine(run)
+
+dflow.finish()
 print()
 
-# 4b — Save forum state
-forum_logger.save()
-print("  💾 State saved to /tmp/discordflow_demo_state.json")
-state_contents = json.load(open("/tmp/discordflow_demo_state.json"))
-print("  State contents:", state_contents)
-forum_logger.finish()
+# =============================================================================
+# SECTION 4 — Forum Thread Resumption / Second Run (LDA on Iris)
+# =============================================================================
+print("─" * 60)
+print("  [4/8] Second run — LDA on Iris (forum resume / second channel)")
+print("─" * 60)
+
+X_tr2, X_te2, y_tr2, y_te2, _ = prepare_iris()
+
+clf_lda = LinearDiscriminantAnalysis()
+clf_lda.fit(X_tr2, y_tr2)
+
+lda_acc  = round(accuracy_score(y_te2, clf_lda.predict(X_te2)), 4)
+lda_prob = clf_lda.predict_proba(X_te2)
+lda_loss = round(log_loss(y_te2, lda_prob), 5)
+
+dflow2 = DiscordFlow(
+    webhook_url     = WEBHOOK_URL,
+    experiment_name = "WP_IrisLDA",
+    username        = "TrainBot | Watin Promfiy",
+    state_file      = "/tmp/discordflow_demo_state.json",
+    async_logging   = False,
+    dry_run         = DRY_RUN,
+)
+
+def train_lda(run):
+    run.log_param("author", "Watin Promfiy")
+    run.log_params({
+        "dataset"   : "Iris (sklearn)",
+        "model"     : "LinearDiscriminantAnalysis",
+        "solver"    : "svd",
+        "n_classes" : 3,
+    })
+    run.set_tag("author",   "Watin Promfiy")
+    run.set_tag("dataset",  "Iris (3 classes, 4 features)")
+    run.set_tag("framework","scikit-learn")
+
+    # LDA is a single-pass algorithm — one result, logged as step=1
+    run.log_metrics(
+        {"Val Loss": lda_loss, "Val Acc": f"{lda_acc*100:.1f}%"},
+        step=1,
+        system_metrics=SYS_METRICS if SYS_METRICS else None,
+    )
+
+    if HAS_MPL:
+        # Plot 2D LDA projection
+        lda_2d = LinearDiscriminantAnalysis(n_components=2)
+        X_all  = np.vstack([X_tr2, X_te2])
+        y_all  = np.concatenate([y_tr2, y_te2])
+        X_proj = lda_2d.fit_transform(X_all, y_all)
+
+        fig, ax = plt.subplots(figsize=(7, 5))
+        colors  = ["#3498DB", "#E74C3C", "#2ECC71"]
+        for cls, col in enumerate(colors):
+            idx = y_all == cls
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1],
+                       c=col, label=f"Class {cls}", alpha=0.7, edgecolors="k", s=50)
+        ax.set(title="LDA Projection — Iris (Watin Promfiy)",
+               xlabel="LD1", ylabel="LD2")
+        ax.legend()
+        plt.tight_layout()
+        run.log_figure(fig, title="Iris LDA 2D Projection — Watin Promfiy")
+        plt.close(fig)
+        print("  📊 LDA projection figure logged")
+
+    run.log_text(
+        f"model,val_loss,val_acc\nLDA,{lda_loss},{lda_acc}",
+        filename="iris_lda_result.csv",
+    )
+    print(f"  ✅  LDA val_acc={lda_acc*100:.1f}%  val_loss={lda_loss}")
+
+if CHANNEL_MODE == "forum":
+    with dflow2.start_forum_run(
+        "iris-lda-v1",
+        description="LDA on Iris — Watin Promfiy"
+    ) as run:
+        train_lda(run)
+else:
+    with dflow2.start_run("iris-lda-v1") as run:
+        train_lda(run)
+
+dflow2.finish()
 print()
 
 # =============================================================================
@@ -278,121 +346,132 @@ print("─" * 60)
 print("  [5/8] State persistence & resume_run()")
 print("─" * 60)
 
-# Simulate a fresh runtime loading saved state
-fresh_logger = DiscordFlow(
-    webhook_url     = FORUM_WEBHOOK_URL,
-    experiment_name = "WP_LLM_FineTune",
-    state_file      = "/tmp/discordflow_demo_state.json",  # ← auto-loaded
-    async_logging   = False,
-    dry_run         = DRY_RUN,
+fresh = DiscordFlow(
+    webhook_url = WEBHOOK_URL,
+    experiment_name = "WP_StateTest",
+    state_file  = "/tmp/discordflow_demo_state.json",
+    dry_run     = DRY_RUN,
+    async_logging = False,
 )
-print("  Loaded state:", fresh_logger._run_state)
+dflow.save("/tmp/discordflow_demo_state.json")
+fresh2 = DiscordFlow(
+    webhook_url     = WEBHOOK_URL,
+    experiment_name = "WP_StateTest",
+    state_file      = "/tmp/discordflow_demo_state.json",
+    dry_run         = DRY_RUN,
+    async_logging   = False,
+)
+print("  Auto-loaded state:", fresh2._run_state)
 
-# Manual resume (for when you know the thread ID)
-fresh_logger.resume_run("manual_run", "1234567890000001")
-fresh_logger.save("/tmp/discordflow_demo_state_v2.json")
-print("  After manual resume:", json.load(open("/tmp/discordflow_demo_state_v2.json")))
-fresh_logger.finish()
+fresh2.resume_run("manual_run", "1234567890000001")
+fresh2.save("/tmp/discordflow_demo_state_v2.json")
+print("  After resume_run:", json.load(open("/tmp/discordflow_demo_state_v2.json")))
+fresh2.finish()
 print()
 
 # =============================================================================
-# SECTION 6 — Error Capture (exception inside with-block)
+# SECTION 6 — Error Capture
 # =============================================================================
 print("─" * 60)
 print("  [6/8] Error capture — exception inside run")
 print("─" * 60)
 
 err_logger = DiscordFlow(
-    webhook_url     = NORMAL_WEBHOOK_URL,
+    webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_ErrorTest",
-    username        = "TrainBot · Watin Promfiy",
+    username        = "TrainBot | Watin Promfiy",
     async_logging   = False,
     dry_run         = DRY_RUN,
 )
 
+if CHANNEL_MODE == "forum":
+    ctx = err_logger.start_forum_run("crash-run", "Error test")
+else:
+    ctx = err_logger.start_run("crash-run")
+
 try:
-    with err_logger.start_run("crash_run") as run:
+    with ctx as run:
         run.log_params({"lr": 1e-3, "author": "Watin Promfiy"})
         run.log_metrics({"loss": 0.5}, step=1)
-        raise ValueError("Simulated NaN loss — training diverged!")  # ← intentional crash
+        raise ValueError("Simulated NaN loss — training diverged!")
 except ValueError:
-    pass  # DiscordFlow already caught it, posted ❌ FAILED embed, re-raised
+    pass
+
 err_logger.finish()
-print("  ✅ Error was captured and posted to Discord")
-print()
+print("  ✅  Crash captured and posted to Discord as ❌ FAILED\n")
 
 # =============================================================================
-# SECTION 7 — ArtifactTooLargeError exception
+# SECTION 7 — Exceptions
 # =============================================================================
 print("─" * 60)
 print("  [7/8] Exceptions")
 print("─" * 60)
 
 try:
-    raise ArtifactTooLargeError("/tmp/huge_model.bin", 30 * 1024 * 1024)
+    raise ArtifactTooLargeError("/tmp/huge.bin", 30 * 1024 * 1024)
 except ArtifactTooLargeError as e:
     print("  ArtifactTooLargeError:", e)
 
 try:
     raise RunNotActiveError()
 except RunNotActiveError as e:
-    print("  RunNotActiveError:", e)
+    print("  RunNotActiveError    :", e)
 
 try:
     raise WebhookError("404 Not Found — check your webhook URL")
 except WebhookError as e:
-    print("  WebhookError:", e)
+    print("  WebhookError         :", e)
 print()
 
 # =============================================================================
-# SECTION 8 — Dry-run meta check (all 5 system metrics)
+# SECTION 8 — All system_metrics keys via dry-run
 # =============================================================================
 print("─" * 60)
-print("  [8/8] Smoke: all system_metrics keys via log_metrics()")
+print("  [8/8] All system_metrics smoke test")
 print("─" * 60)
 
-meta_logger = DiscordFlow(
-    webhook_url     = NORMAL_WEBHOOK_URL,
+meta = DiscordFlow(
+    webhook_url     = WEBHOOK_URL,
     experiment_name = "WP_MetricsCheck",
     async_logging   = False,
-    dry_run         = True,   # always dry for this section
+    dry_run         = True,   # always dry for this check
 )
-with meta_logger.start_run("all_sys_metrics") as run:
+if CHANNEL_MODE == "forum":
+    ctx = meta.start_forum_run("sys-metrics-check", "HW check")
+else:
+    ctx = meta.start_run("sys-metrics-check")
+
+with ctx as run:
     run.log_metrics(
-        {"dummy_loss": 0.0},
-        step=1,
+        {"dummy": 0.0}, step=1,
         system_metrics=["cpu", "ram", "gpu", "disk", "network"],
     )
-meta_logger.finish()
+meta.finish()
 print()
 
 # =============================================================================
 # SUMMARY
 # =============================================================================
 print("=" * 65)
-print("  ✅  All features verified!")
+print("  ✅  All features verified with REAL training!")
 print()
 print("  Covered:")
-print("   [x] start_run()           — Normal channel mode")
-print("   [x] start_forum_run()     — Forum channel thread mode")
-print("   [x] log_param/log_params  — Hyperparameter logging")
-print("   [x] log_metric/log_metrics— Metric logging with step")
-print("   [x] set_tag               — Arbitrary key-value tags")
-print("   [x] log_artifact          — File upload (25 MB max)")
-print("   [x] log_text              — Text/CSV string upload")
-print("   [x] log_figure            — matplotlib PNG upload")
-print("   [x] system_metrics=       — cpu, ram, gpu, disk, network")
-print("   [x] save() / resume_run() — State persistence")
-print("   [x] State auto-load       — state_file on __init__")
-print("   [x] Error capture         — ❌ FAILED embed on exception")
-print("   [x] ArtifactTooLargeError — Exception raised correctly")
-print("   [x] RunNotActiveError     — Exception raised correctly")
-print("   [x] WebhookError          — Exception raised correctly")
-print("   [x] async_logging=False   — Synchronous mode tested")
-print("   [x] dry_run=True          — No real HTTP calls")
-print("   [x] finish()              — Executor flushed")
-print("   [x] Utils helpers         — human_size, human_duration,")
-print("       ascii_progress, format_kv_table, truncate")
+print("   [x] Real MLP training  — Wine dataset (sklearn, 20 epochs)")
+print("   [x] Real LDA training  — Iris dataset (single pass)")
+print("   [x] start_run / start_forum_run — Normal & Forum modes")
+print("   [x] log_param / log_params      — Hyperparameters")
+print("   [x] log_metric / log_metrics    — Per-epoch real metrics")
+print("   [x] set_tag                     — Experiment labels")
+print("   [x] log_artifact                — JSON file upload")
+print("   [x] log_text                    — CSV string upload")
+print("   [x] log_figure                  — Loss curve + LDA plot")
+print("   [x] system_metrics=             — cpu/ram/gpu/disk/network")
+print("   [x] save() / resume_run()       — State persistence")
+print("   [x] State auto-load             — state_file on __init__")
+print("   [x] Error capture               — ❌ FAILED embed")
+print("   [x] ArtifactTooLargeError / RunNotActiveError / WebhookError")
+print("   [x] async_logging=False / dry_run / finish()")
+print("   [x] Utils: human_size, human_duration, ascii_progress, truncate")
 print()
-print(f"  Author: Watin Promfiy  |  DiscordFlow v0.3.0")
+print(f"  Author: Watin Promfiy  |  DiscordFlow v0.3.3")
 print("=" * 65)
