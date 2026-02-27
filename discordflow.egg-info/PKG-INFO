@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
 Name: discordflow
-Version: 0.3.0
+Version: 0.3.1
 Summary: A lightweight MLflow clone that logs ML training metrics, parameters, and artifacts directly to Discord webhooks — with Forum thread support.
-Author-email: DiscordFlow Contributors <your.email@example.com>
+Author-email: Watin Promfiy <watin@example.com>
 License: MIT
 Project-URL: Homepage, https://github.com/E27-25/discordflow
 Project-URL: Bug Tracker, https://github.com/E27-25/discordflow/issues
@@ -37,7 +37,7 @@ Requires-Dist: matplotlib; extra == "dev"
 # DiscordFlow 🚀
 
 > **The MLflow you already have open on your phone.**
-> Log ML training metrics, parameters, and artifacts directly to a Discord channel via webhooks — no server required.
+> Log ML training metrics, parameters, and artifacts directly to Discord — no server required.
 
 ![PyPI](https://img.shields.io/pypi/v/discordflow)
 ![Python Versions](https://img.shields.io/pypi/pyversions/discordflow)
@@ -45,56 +45,51 @@ Requires-Dist: matplotlib; extra == "dev"
 
 ---
 
-## ✨ Features
+## ✨ What's in the Box
 
-| Feature | Description |
+| Feature | Details |
 |---|---|
-| 📈 **Metric Logging** | Post metrics per step/epoch with `log_metrics()` |
-| ⚙️ **Param Logging** | Log hyperparameters with `log_param()` / `log_params()` |
-| 🏷️ **Tags** | Attach arbitrary key-value tags to runs |
-| 📁 **Artifact Upload** | Upload files (models, plots, CSVs) up to 25 MB |
-| 📄 **Text Artifacts** | Upload text snippets as `.txt` file attachments |
-| 📈 **Figure Upload** | Send `matplotlib` figures directly as PNG attachments |
-| 💬 **Normal Channel** | `start_run()` — logs embeds directly into the channel |
-| 📋 **Forum Channel** | `start_forum_run()` — each run gets its own dedicated forum thread |
-| 💾 **State Persistence** | `save()` — persist thread IDs to JSON for Colab restart recovery |
-| 🖥️ **System Metrics** | Per-call hardware stats: CPU, RAM, GPU, Disk, Network |
-| ⚡ **Async Logging** | Background thread executor — never blocks your training loop |
-| ❌ **Error Capture** | Exceptions inside a run block are caught and posted to Discord |
-| 🖥️ **Dry-Run Mode** | `dry_run=True` prints to stdout — no real webhook calls |
+| 📈 **Metrics** | `log_metric()` / `log_metrics()` per step/epoch |
+| ⚙️ **Params** | `log_param()` / `log_params()` — logged as blue embeds |
+| 🏷️ **Tags** | `set_tag()` — arbitrary key-value labels on a run |
+| 📁 **Artifact upload** | Any file up to 25 MB via `log_artifact()` |
+| 📄 **Text artifact** | `log_text()` — upload a string as a `.txt` / `.csv` attachment |
+| 📊 **Figure upload** | `log_figure(fig)` — send `matplotlib` figures as PNG into Discord |
+| 💬 **Normal channel** | `start_run()` — embeds posted directly in the channel |
+| 📋 **Forum channel** | `start_forum_run()` — each run gets its own dedicated Discord thread |
+| 🔄 **Auto-resume** | Threads are resumed automatically after Colab restarts |
+| 💾 **State persistence** | `save()` stores `{run_name: thread_id}` to JSON |
+| 🖥️ **System metrics** | Per-call, configurable: CPU, RAM, GPU, Disk, Network |
+| ⚡ **Async logging** | `ThreadPoolExecutor` — Discord calls never block training |
+| ❌ **Error capture** | Exceptions inside `with` blocks are posted to Discord |
+| 🖥️ **Dry-run mode** | `dry_run=True` prints to stdout — no real webhook calls |
 
 ---
 
 ## 📦 Installation
 
 ```bash
+# Core (no system metrics)
 pip install discordflow
-```
 
-With system hardware metrics (CPU, RAM, Disk, Network):
-```bash
+# + CPU, RAM, Disk, Network metrics
 pip install "discordflow[system]"
-```
 
-With NVIDIA GPU metrics:
-```bash
+# + NVIDIA GPU metrics
 pip install "discordflow[system,gpu]"
 ```
 
-**Requirements:** Python ≥ 3.8, `requests`
+Requires Python ≥ 3.8.
 
 ---
 
 ## ⚡ Quickstart
 
-### 1. Get a Discord Webhook URL
+Get a webhook URL from **Discord Server Settings → Integrations → Webhooks → New Webhook**.
 
-In your Discord server: **Server Settings → Integrations → Webhooks → New Webhook → Copy URL**
+### Normal Channel — `start_run()`
 
-### 2. Normal Channel Mode — `start_run()`
-
-Use this when your webhook points to a **regular text/announcement channel**.
-Embeds are posted directly into the channel.
+Use when your webhook points to a regular **text / announcement channel**.
 
 ```python
 from discordflow import DiscordFlow
@@ -106,66 +101,98 @@ with dflow.start_run("baseline") as run:
     run.set_tag("dataset", "ImageNet")
 
     for epoch in range(1, 11):
+        loss = train_one_epoch(model, ...)
         run.log_metrics(
-            {"Train Loss": 1.0 / epoch, "Val Acc": 0.7 + 0.02 * epoch},
+            {"Train Loss": loss, "Val Acc": eval(model, ...)},
             step=epoch,
-            system_metrics=["cpu", "ram"],  # ← hardware stats attached to each update
+            system_metrics=["cpu", "ram"],   # ← hardware stats appended to each embed
         )
 
     run.log_artifact("best_model.pt")
     run.log_figure(fig, title="Loss Curve")
 
-dflow.finish()  # flush async queue
+dflow.finish()  # flush async queue before exit
 ```
 
-### 3. Forum Channel Mode — `start_forum_run()`
+### Forum Channel — `start_forum_run()`
 
-Use this when your webhook points to a **Forum channel**.
-Each run automatically gets its own Discord thread. Perfect for tracking many experiments.
+Use when your webhook points to a **Forum channel**.  
+Each run automatically gets its own Discord thread — perfect for comparing many experiments.
 
 ```python
 dflow = DiscordFlow(FORUM_WEBHOOK_URL, experiment_name="LLM_FineTune")
 
-with dflow.start_forum_run("lora_r16", description="LoRA sweep rank=16") as run:
+with dflow.start_forum_run("lora_r16", description="LoRA rank=16 sweep") as run:
     run.log_params({"lora_rank": 16, "lr": 2e-4, "epochs": 3})
-    run.set_tag("framework", "HuggingFace")
 
     for epoch in range(1, 4):
         run.log_metrics(
-            {"Train Loss": 2.5 / epoch, "Val Loss": 2.7 / epoch},
+            {"Train Loss": ..., "Val Loss": ...},
             step=epoch,
-            system_metrics=["cpu", "ram", "gpu"],  # ← GPU stats for NVIDIA Colab
+            system_metrics=["cpu", "ram", "gpu"],  # ← GPU stats for Colab/NVIDIA
         )
-        run.log_figure(fig, title=f"Epoch {epoch} Loss")
+        run.log_figure(fig, title=f"Epoch {epoch} curve")
 
-# ✅ Summary posted in the thread automatically
+# ✅ Summary + elapsed + final metrics auto-posted to the thread
 
-dflow.save()   # ← IMPORTANT: persist thread IDs for restart recovery
+dflow.save()    # ← persist thread IDs so you can resume after a restart
 dflow.finish()
+```
+
+> ⚠️ **Wrong channel type?** If you call `start_run()` on a Forum webhook (or vice versa), DiscordFlow will raise a `WebhookError` with a message telling you exactly which method to switch to.
+
+---
+
+## 🖥️ Configurable System Metrics
+
+Pass any combination to `system_metrics=` on `log_metrics()`:
+
+| Key | Logged value | Requires |
+|---|---|---|
+| `"cpu"` | Usage % + clock speed | `discordflow[system]` |
+| `"ram"` | Usage % + GB used / total | `discordflow[system]` |
+| `"gpu"` | Util % + VRAM used / total, per GPU | `discordflow[system,gpu]` |
+| `"disk"` | Usage % + GB used / total | `discordflow[system]` |
+| `"network"` | Total MB ↑ sent / ↓ received | `discordflow[system]` |
+
+```python
+# Minimal — CPU + RAM only
+run.log_metrics({"loss": 0.4}, step=1, system_metrics=["cpu", "ram"])
+
+# Everything
+run.log_metrics({"loss": 0.4}, step=1,
+    system_metrics=["cpu", "ram", "gpu", "disk", "network"])
 ```
 
 ---
 
 ## 💾 Colab Restart Recovery
 
-If your Colab runtime crashes or disconnects, restore your session:
+When your Colab runtime reconnects, thread IDs are restored automatically from the saved state file:
 
 ```python
-# In a fresh Colab runtime — restore your thread IDs
-dflow = DiscordFlow(FORUM_WEBHOOK_URL, "LLM_FineTune")
+# Fresh runtime — state_file is loaded automatically on __init__
+dflow = DiscordFlow(FORUM_WEBHOOK_URL, "LLM_FineTune",
+                   state_file=".discordflow_state.json")  # default path
 
-# Option A — automatic restore (if state file was previously saved)
-# State is loaded automatically from .discordflow_state.json on startup
+# start_forum_run now resumes the existing thread instead of creating a new one
+with dflow.start_forum_run("lora_r16") as run:
+    ...
+```
 
-# Option B — manual override
+**Manual override** (if you know the thread ID):
+```python
 dflow.resume_run("lora_r16", thread_id="1234567890123456789")
 dflow.save()
+```
 
-# Option C — ZIP backup/restore (downloads to your PC, re-uploads to Colab)
+**ZIP backup** (download to PC, re-upload on next Colab session):
+```python
 from discordflow.colab_utils import export_session, import_session
 
-export_session(dflow)   # downloads discordflow_backup.zip to your machine
-import_session(dflow)   # on fresh runtime: upload the zip to restore threads
+export_session(dflow)   # ← downloads discordflow_backup.zip to your machine
+# --- On a fresh Colab runtime ---
+import_session(dflow)   # ← upload the zip to restore all thread IDs
 ```
 
 ---
@@ -176,92 +203,110 @@ import_session(dflow)   # on fresh runtime: upload the zip to restore threads
 dflow = DiscordFlow(
     webhook_url     = WEBHOOK_URL,
     experiment_name = "ResNet_Training",
-    username        = "TrainBot 🏋️",                      # custom bot name
-    avatar_url      = "https://i.imgur.com/AfFp7pu.png",  # any public image URL
+    username        = "TrainBot 🏋️",
+    avatar_url      = "https://i.imgur.com/AfFp7pu.png",
 )
 ```
 
 ---
 
-## 🖥️ System Metrics Reference
-
-Pass any combination to `system_metrics=` on `log_metrics()`:
-
-| Key | What's logged | Requires |
-|---|---|---|
-| `"cpu"` | Usage % + clock speed | `discordflow[system]` |
-| `"ram"` | Usage % + GB used/total | `discordflow[system]` |
-| `"gpu"` | Util % + VRAM used/total per GPU | `discordflow[system,gpu]` |
-| `"disk"` | Usage % + GB used/total | `discordflow[system]` |
-| `"network"` | Total MB sent/received | `discordflow[system]` |
-
-```python
-# Mix and match freely per call
-run.log_metrics({"loss": 0.4}, step=1, system_metrics=["cpu", "ram"])
-run.log_metrics({"val_loss": 0.5}, step=1, system_metrics=["cpu", "ram", "gpu", "disk", "network"])
-```
-
----
-
-## 📚 API Reference
+## 📚 Full API Reference
 
 ### `DiscordFlow(webhook_url, experiment_name, ...)`
 
 | Parameter | Default | Description |
 |---|---|---|
 | `webhook_url` | required | Discord webhook URL |
-| `experiment_name` | `"Default Experiment"` | Shown in every embed |
-| `state_file` | `".discordflow_state.json"` | JSON file for thread ID persistence |
-| `async_logging` | `True` | Background thread for non-blocking sends |
-| `dry_run` | `False` | Print to stdout instead of calling webhook |
+| `experiment_name` | `"Default Experiment"` | Shown in every embed footer |
+| `state_file` | `".discordflow_state.json"` | JSON path for thread ID persistence (`None` to disable) |
+| `async_logging` | `True` | Non-blocking background thread for webhook calls |
+| `dry_run` | `False` | Print embeds to stdout, no actual HTTP requests |
 | `username` | `"DiscordFlow 🤖"` | Bot display name in Discord |
 | `avatar_url` | `None` | Bot profile picture URL |
 
 ### Channel Methods
 
-| Method | Channel type | Description |
-|---|---|---|
-| `start_run(run_name)` | Normal | Start a run, post embeds to channel |
-| `start_forum_run(run_name, description)` | Forum | Create/resume a forum thread for this run |
-| `resume_run(run_name, thread_id)` | Forum | Manually re-link a run to an existing thread |
-| `save(filepath)` | Both | Save `{run_name: thread_id}` state to JSON |
-| `finish()` | Both | Flush async queue and shut down executor |
+| Method | Channel | Returns | Description |
+|---|---|---|---|
+| `start_run(run_name)` | Normal | `ActiveRun` | Start a run, post embeds to channel |
+| `start_forum_run(run_name, description)` | Forum | `ForumActiveRun` | Create/resume a forum thread for this run |
+| `resume_run(run_name, thread_id)` | Forum | — | Manually re-link a run name to an existing thread |
+| `save(filepath=None)` | Both | — | Persist `{run_name: thread_id}` to JSON |
+| `finish()` | Both | — | Flush async queue and shut down executor |
 
-### Logging Methods (available on both `ActiveRun` and `ForumActiveRun`)
+### Logging Methods (on `ActiveRun` & `ForumActiveRun`)
 
 ```python
 run.log_param("lr", 3e-4)
-run.log_params({"lr": 3e-4, "batch": 128})
+run.log_params({"lr": 3e-4, "batch": 128, "optimizer": "AdamW"})
 run.log_metric("loss", 0.42, step=5)
-run.log_metrics({"loss": 0.42, "acc": 0.91}, step=5, system_metrics=["cpu", "ram"])
+run.log_metrics({"loss": 0.42, "acc": 0.91}, step=5,
+               system_metrics=["cpu", "ram"])
 run.set_tag("author", "e27")
 run.log_artifact("checkpoint.pt")
-run.log_text("epoch,loss\n1,1.0", filename="metrics.csv")
+run.log_text("epoch,loss\n1,1.0\n2,0.5", filename="loss.csv")
 run.log_figure(fig, title="Loss Curve")
 ```
+
+### Exceptions
+
+| Exception | When raised |
+|---|---|
+| `WebhookError` | Discord HTTP error (wrong channel type, network issue) |
+| `ArtifactTooLargeError` | File exceeds 25 MB Discord limit |
+| `RunNotActiveError` | Operation attempted with no active run |
 
 ---
 
 ## 🧪 Local Testing (Dry Run)
 
 ```python
-dflow = DiscordFlow("ANY_URL", dry_run=True)
-with dflow.start_run("test") as run:
-    run.log_metrics({"loss": 0.42}, step=1)
+dflow = DiscordFlow("ANY_URL", "test", dry_run=True)
+with dflow.start_run("test_run") as run:
+    run.log_metrics({"loss": 0.42, "acc": 0.91}, step=1)
+```
+
+Output is printed to stdout — no real HTTP calls, no webhook URL needed.
+
+---
+
+## 🗂️ Project Layout
+
+```
+discordflow/
+├── core.py          # DiscordFlow main class
+├── run.py           # ActiveRun + ForumActiveRun context managers
+├── utils.py         # Colour palette, formatters, collect_system_metrics()
+├── exceptions.py    # Custom exception hierarchy
+├── colab_utils.py   # export_session / import_session for Colab
+└── __init__.py      # Public API surface
+colab_demo.py        # Full runnable Colab demo (switchable normal/forum mode)
+example.py           # Minimal dry-run example
 ```
 
 ---
 
 ## 🤝 Contributing
 
-1. Fork the repo
-2. Create your feature branch: `git checkout -b feat/my-feature`
-3. Commit your changes: `git commit -m "feat: add my feature"`
-4. Push: `git push origin feat/my-feature`
-5. Open a Pull Request
+```bash
+git clone https://github.com/E27-25/discordflow.git
+cd discordflow-project
+pip install -e ".[dev]"
+```
+
+1. Fork → feature branch → PR.
+2. Keep PRs focused; match the existing code style.
+
+---
+
+## 👤 Author
+
+**Watin Promfiy**
+- GitHub: [@E27-25](https://github.com/E27-25)
+- Project: [github.com/E27-25/discordflow](https://github.com/E27-25/discordflow)
 
 ---
 
 ## 📄 License
 
-MIT © DiscordFlow Contributors
+MIT © Watin Promfiy
