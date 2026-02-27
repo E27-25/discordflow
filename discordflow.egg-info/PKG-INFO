@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: discordflow
-Version: 0.3.1
+Version: 0.3.2
 Summary: A lightweight MLflow clone that logs ML training metrics, parameters, and artifacts directly to Discord webhooks — with Forum thread support.
 Author-email: Watin Promfiy <watin@example.com>
 License: MIT
