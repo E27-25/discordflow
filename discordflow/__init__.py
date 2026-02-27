@@ -29,7 +29,7 @@ from .exceptions import (
 )
 
 __version__ = "0.3.0"
-__author__  = "DiscordFlow Contributors"
+__author__  = "Watin Promfiy"
 __license__ = "MIT"
 
 __all__ = [
