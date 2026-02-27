@@ -4,18 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "discordflow"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
   { name="DiscordFlow Contributors", email="your.email@example.com" },
 ]
-description = "A lightweight MLflow clone that logs ML training metrics, parameters, and artifacts directly to Discord webhooks."
+description = "A lightweight MLflow clone that logs ML training metrics, parameters, and artifacts directly to Discord webhooks — with Forum thread support."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
 dependencies = [
     "requests>=2.25.0",
 ]
-keywords = ["mlflow", "discord", "machine-learning", "experiment-tracking", "webhooks", "deep-learning"]
+keywords = [
+    "mlflow", "discord", "machine-learning", "experiment-tracking",
+    "webhooks", "deep-learning", "forum", "training-monitor",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -32,10 +35,12 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["build", "twine", "pytest", "pytest-mock"]
+system  = ["psutil>=5.9"]          # CPU, RAM, Disk, Network metrics
+gpu     = ["pynvml>=11.0"]        # NVIDIA GPU metrics
+dev     = ["build", "twine", "pytest", "matplotlib"]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/discordflow"
-"Bug Tracker" = "https://github.com/yourusername/discordflow/issues"
-"Documentation" = "https://github.com/yourusername/discordflow#readme"
-"Changelog" = "https://github.com/yourusername/discordflow/releases"
+"Homepage"      = "https://github.com/E27-25/discordflow"
+"Bug Tracker"   = "https://github.com/E27-25/discordflow/issues"
+"Documentation" = "https://github.com/E27-25/discordflow#readme"
+"Changelog"     = "https://github.com/E27-25/discordflow/releases"

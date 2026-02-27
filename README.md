@@ -18,9 +18,14 @@
 | 🏷️ **Tags** | Attach arbitrary key-value tags to runs |
 | 📁 **Artifact Upload** | Upload files (models, plots, CSVs) up to 25 MB |
 | 📄 **Text Artifacts** | Upload text snippets as `.txt` file attachments |
-| ▶️ **Run Management** | Context-manager `start_run()` with auto summary embed on exit |
+| 📈 **Figure Upload** | Send `matplotlib` figures directly as PNG attachments |
+| 💬 **Normal Channel** | `start_run()` — logs embeds directly into the channel |
+| 📋 **Forum Channel** | `start_forum_run()` — each run gets its own dedicated forum thread |
+| 💾 **State Persistence** | `save()` — persist thread IDs to JSON for Colab restart recovery |
+| 🖥️ **System Metrics** | Per-call hardware stats: CPU, RAM, GPU, Disk, Network |
+| ⚡ **Async Logging** | Background thread executor — never blocks your training loop |
+| ❌ **Error Capture** | Exceptions inside a run block are caught and posted to Discord |
 | 🖥️ **Dry-Run Mode** | `dry_run=True` prints to stdout — no real webhook calls |
-| ❌ **Error Capture** | Exceptions inside a `start_run()` block are caught and posted |
 
 ---
 
@@ -28,6 +33,16 @@
 
 ```bash
 pip install discordflow
+```
+
+With system hardware metrics (CPU, RAM, Disk, Network):
+```bash
+pip install "discordflow[system]"
+```
+
+With NVIDIA GPU metrics:
+```bash
+pip install "discordflow[system,gpu]"
 ```
 
 **Requirements:** Python ≥ 3.8, `requests`
@@ -40,155 +55,166 @@ pip install discordflow
 
 In your Discord server: **Server Settings → Integrations → Webhooks → New Webhook → Copy URL**
 
-### 2. Drop it into your training loop
+### 2. Normal Channel Mode — `start_run()`
+
+Use this when your webhook points to a **regular text/announcement channel**.
+Embeds are posted directly into the channel.
 
 ```python
 from discordflow import DiscordFlow
 
-WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_URL"
-dflow = DiscordFlow(WEBHOOK_URL, experiment_name="MoE_Router_Training")
+dflow = DiscordFlow(WEBHOOK_URL, experiment_name="ResNet_Training")
 
-# Log hyperparameters
-dflow.log_params({
-    "experts": 8,
-    "routing_strategy": "top-k",
-    "learning_rate": 3e-4,
-})
+with dflow.start_run("baseline") as run:
+    run.log_params({"lr": 3e-4, "batch_size": 128, "epochs": 10})
+    run.set_tag("dataset", "ImageNet")
 
-# Training loop
-for epoch in range(1, 6):
-    loss = 1.0 / epoch
-    dflow.log_metrics({
-        "Train Loss": round(loss, 4),
-        "Load Balance": round(0.8 + 0.02 * epoch, 4),
-    }, step=epoch)
+    for epoch in range(1, 11):
+        run.log_metrics(
+            {"Train Loss": 1.0 / epoch, "Val Acc": 0.7 + 0.02 * epoch},
+            step=epoch,
+            system_metrics=["cpu", "ram"],  # ← hardware stats attached to each update
+        )
 
-# Upload an artifact (max 25 MB)
-# dflow.log_artifact("router_weights.pt")
-# dflow.log_artifact("loss_curve.png")
+    run.log_artifact("best_model.pt")
+    run.log_figure(fig, title="Loss Curve")
+
+dflow.finish()  # flush async queue
 ```
 
-### 3. Context-manager pattern (recommended)
+### 3. Forum Channel Mode — `start_forum_run()`
 
-Use `start_run()` to get an automatic run-summary embed when the block exits — including elapsed time, all params, and final metrics. If your code crashes, the traceback is posted too.
+Use this when your webhook points to a **Forum channel**.
+Each run automatically gets its own Discord thread. Perfect for tracking many experiments.
 
 ```python
-with dflow.start_run("lora_rank_16") as run:
-    run.log_params({"lr": 2e-4, "lora_rank": 16, "epochs": 3})
+dflow = DiscordFlow(FORUM_WEBHOOK_URL, experiment_name="LLM_FineTune")
+
+with dflow.start_forum_run("lora_r16", description="LoRA sweep rank=16") as run:
+    run.log_params({"lora_rank": 16, "lr": 2e-4, "epochs": 3})
     run.set_tag("framework", "HuggingFace")
 
     for epoch in range(1, 4):
-        run.log_metrics({
-            "Train Loss": round(2.5 / epoch, 4),
-            "Val Loss":   round(2.7 / epoch, 4),
-        }, step=epoch)
+        run.log_metrics(
+            {"Train Loss": 2.5 / epoch, "Val Loss": 2.7 / epoch},
+            step=epoch,
+            system_metrics=["cpu", "ram", "gpu"],  # ← GPU stats for NVIDIA Colab
+        )
+        run.log_figure(fig, title=f"Epoch {epoch} Loss")
 
-# ✅ Run Complete embed is auto-posted here
+# ✅ Summary posted in the thread automatically
+
+dflow.save()   # ← IMPORTANT: persist thread IDs for restart recovery
+dflow.finish()
+```
+
+---
+
+## 💾 Colab Restart Recovery
+
+If your Colab runtime crashes or disconnects, restore your session:
+
+```python
+# In a fresh Colab runtime — restore your thread IDs
+dflow = DiscordFlow(FORUM_WEBHOOK_URL, "LLM_FineTune")
+
+# Option A — automatic restore (if state file was previously saved)
+# State is loaded automatically from .discordflow_state.json on startup
+
+# Option B — manual override
+dflow.resume_run("lora_r16", thread_id="1234567890123456789")
+dflow.save()
+
+# Option C — ZIP backup/restore (downloads to your PC, re-uploads to Colab)
+from discordflow.colab_utils import export_session, import_session
+
+export_session(dflow)   # downloads discordflow_backup.zip to your machine
+import_session(dflow)   # on fresh runtime: upload the zip to restore threads
 ```
 
 ---
 
 ## 🎨 Custom Bot Identity
 
-Give your DiscordFlow bot a custom name and profile picture so it blends into your server:
-
 ```python
 dflow = DiscordFlow(
-    webhook_url    = "YOUR_WEBHOOK_URL",
-    experiment_name= "ResNet_Training",
-    username       = "TrainBot 🏋️",          # Bot name shown in Discord
-    avatar_url     = "https://i.imgur.com/YOUR_IMAGE.png",  # Bot profile picture URL
+    webhook_url     = WEBHOOK_URL,
+    experiment_name = "ResNet_Training",
+    username        = "TrainBot 🏋️",                      # custom bot name
+    avatar_url      = "https://i.imgur.com/AfFp7pu.png",  # any public image URL
 )
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `username` | `str` | Display name shown on every Discord message (default: `"DiscordFlow 🤖"`) |
-| `avatar_url` | `str` | Public URL to any image for the bot's avatar (JPEG, PNG, GIF) |
-
-> **Tip:** Use any publicly accessible image URL — Discord's CDN, Imgur, GitHub raw links, etc.
-
 ---
 
-## 🧪 Local Testing (Dry Run)
+## 🖥️ System Metrics Reference
 
-No Discord server? No problem. Use `dry_run=True` to print all messages to stdout instead of calling the webhook:
+Pass any combination to `system_metrics=` on `log_metrics()`:
+
+| Key | What's logged | Requires |
+|---|---|---|
+| `"cpu"` | Usage % + clock speed | `discordflow[system]` |
+| `"ram"` | Usage % + GB used/total | `discordflow[system]` |
+| `"gpu"` | Util % + VRAM used/total per GPU | `discordflow[system,gpu]` |
+| `"disk"` | Usage % + GB used/total | `discordflow[system]` |
+| `"network"` | Total MB sent/received | `discordflow[system]` |
 
 ```python
-dflow = DiscordFlow("ANY_URL", experiment_name="test", dry_run=True)
-dflow.log_metrics({"loss": 0.42}, step=1)
-```
-
-Run the bundled demo:
-
-```bash
-python example.py
+# Mix and match freely per call
+run.log_metrics({"loss": 0.4}, step=1, system_metrics=["cpu", "ram"])
+run.log_metrics({"val_loss": 0.5}, step=1, system_metrics=["cpu", "ram", "gpu", "disk", "network"])
 ```
 
 ---
 
 ## 📚 API Reference
 
-### `DiscordFlow(webhook_url, experiment_name, dry_run, username, avatar_url)`
+### `DiscordFlow(webhook_url, experiment_name, ...)`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `webhook_url` | `str` | required | Discord webhook URL |
-| `experiment_name` | `str` | `"Default Experiment"` | Shown in every embed |
-| `dry_run` | `bool` | `False` | Print to stdout instead of calling webhook |
-| `username` | `str` | `"DiscordFlow 🤖"` | Bot username shown in Discord |
-| `avatar_url` | `str` | `None` | Custom bot avatar URL |
+| Parameter | Default | Description |
+|---|---|---|
+| `webhook_url` | required | Discord webhook URL |
+| `experiment_name` | `"Default Experiment"` | Shown in every embed |
+| `state_file` | `".discordflow_state.json"` | JSON file for thread ID persistence |
+| `async_logging` | `True` | Background thread for non-blocking sends |
+| `dry_run` | `False` | Print to stdout instead of calling webhook |
+| `username` | `"DiscordFlow 🤖"` | Bot display name in Discord |
+| `avatar_url` | `None` | Bot profile picture URL |
 
----
+### Channel Methods
 
-### Logging Methods
+| Method | Channel type | Description |
+|---|---|---|
+| `start_run(run_name)` | Normal | Start a run, post embeds to channel |
+| `start_forum_run(run_name, description)` | Forum | Create/resume a forum thread for this run |
+| `resume_run(run_name, thread_id)` | Forum | Manually re-link a run to an existing thread |
+| `save(filepath)` | Both | Save `{run_name: thread_id}` state to JSON |
+| `finish()` | Both | Flush async queue and shut down executor |
+
+### Logging Methods (available on both `ActiveRun` and `ForumActiveRun`)
 
 ```python
-# Single param
-dflow.log_param("learning_rate", 3e-4)
-
-# Multiple params in one embed
-dflow.log_params({"lr": 3e-4, "batch_size": 128, "epochs": 10})
-
-# Single metric
-dflow.log_metric("loss", 0.42, step=5)
-
-# Multiple metrics in one embed
-dflow.log_metrics({"loss": 0.42, "acc": 0.91}, step=5)
-
-# Arbitrary tags (purple embed)
-dflow.set_tag("author", "e27")
-dflow.set_tag("dataset", "openwebtext")
-
-# Upload a file artifact (max 25 MB)
-dflow.log_artifact("checkpoint.pt")
-dflow.log_artifact("confusion_matrix.png")
-
-# Upload a text snippet as a file
-dflow.log_text("epoch,loss\n1,1.0\n2,0.5", filename="metrics.csv")
+run.log_param("lr", 3e-4)
+run.log_params({"lr": 3e-4, "batch": 128})
+run.log_metric("loss", 0.42, step=5)
+run.log_metrics({"loss": 0.42, "acc": 0.91}, step=5, system_metrics=["cpu", "ram"])
+run.set_tag("author", "e27")
+run.log_artifact("checkpoint.pt")
+run.log_text("epoch,loss\n1,1.0", filename="metrics.csv")
+run.log_figure(fig, title="Loss Curve")
 ```
 
 ---
 
-### Run Management
+## 🧪 Local Testing (Dry Run)
 
 ```python
-# Start a named run (context manager — recommended)
-with dflow.start_run("sweep_01") as run:
-    run.log_params({...})
-    run.log_metrics({...}, step=epoch)
-    run.set_tag("status", "grid_search")
-    run.log_artifact("model.pt")
-# ← Auto-posts run summary embed on exit
-
-# Or explicitly end a run
-run = dflow.start_run("manual_run")
-# ... do stuff ...
-dflow.end_run(status="FINISHED")
+dflow = DiscordFlow("ANY_URL", dry_run=True)
+with dflow.start_run("test") as run:
+    run.log_metrics({"loss": 0.42}, step=1)
 ```
 
 ---
-
 
 ## 🤝 Contributing
 

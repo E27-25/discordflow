@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 discordflow/__init__.py
+discordflow/colab_utils.py
 discordflow/core.py
 discordflow/exceptions.py
 discordflow/run.py

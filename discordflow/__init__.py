@@ -1,23 +1,26 @@
 """
 DiscordFlow — Lightweight ML experiment tracker for Discord webhooks.
 
-Quick start::
+Normal channel::
 
     from discordflow import DiscordFlow
 
-    dflow = DiscordFlow("YOUR_WEBHOOK_URL", experiment_name="my_experiment")
-    dflow.log_param("lr", 3e-4)
-    dflow.log_metrics({"loss": 0.42, "acc": 0.91}, step=1)
+    dflow = DiscordFlow("WEBHOOK_URL", "MyExperiment")
+    with dflow.start_run("baseline") as run:
+        run.log_params({"lr": 3e-4})
+        run.log_metrics({"loss": 0.5}, step=1, system_metrics=["cpu", "ram"])
 
-Context-manager pattern::
+Forum channel::
 
-    with dflow.start_run("sweep_01") as run:
-        run.log_params({"lr": 3e-4, "batch": 32})
-        run.log_metrics({"loss": 0.3}, step=5)
+    dflow = DiscordFlow("FORUM_WEBHOOK_URL", "MyExperiment")
+    with dflow.start_forum_run("baseline") as run:
+        run.log_metrics({"loss": 0.5}, step=1, system_metrics=["cpu", "ram", "gpu"])
+        run.log_figure(fig, title="Loss Curve")
+    dflow.save()   # persist thread IDs across Colab restarts
 """
 
 from .core import DiscordFlow
-from .run import ActiveRun
+from .run import ActiveRun, ForumActiveRun
 from .exceptions import (
     DiscordFlowError,
     WebhookError,
@@ -25,15 +28,21 @@ from .exceptions import (
     RunNotActiveError,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__  = "DiscordFlow Contributors"
 __license__ = "MIT"
 
 __all__ = [
+    # Main class
     "DiscordFlow",
+    # Run context managers
     "ActiveRun",
+    "ForumActiveRun",
+    # Exceptions
     "DiscordFlowError",
     "WebhookError",
     "ArtifactTooLargeError",
     "RunNotActiveError",
+    # Colab utilities (imported on demand)
+    # from discordflow.colab_utils import export_session, import_session
 ]
